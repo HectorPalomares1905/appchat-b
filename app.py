@@ -12,11 +12,11 @@ from ui import (
 
 
 def main(page: ft.Page) -> None:
-    page.title         = "Recepcion de Producto · Empacadora"
-    page.bgcolor       = BG
-    page.padding       = 0
+    page.title   = "Recepcion de Producto · Empacadora"
+    page.bgcolor = BG
+    page.padding = 0
 
-    agente = AgenteRecepcion()
+    agente     = AgenteRecepcion()
     procesando = {"valor": False}
 
     # ── Chat ──────────────────────────────────────────────────
@@ -57,6 +57,17 @@ def main(page: ft.Page) -> None:
         on_click=lambda e: _enviar(),
     )
 
+    def _set_procesando(activo: bool) -> None:
+        """
+        Cambia el estado visual del input en un solo page.update().
+        Usar page.update() en lugar de control.update() individual
+        evita el AttributeError en modo web (Render).
+        """
+        procesando["valor"] = activo
+        field.disabled      = activo
+        send_btn.bgcolor    = "#CCCCCC" if activo else USER_BUBBLE
+        page.update()
+
     def _enviar(_=None) -> None:
         if procesando["valor"]:
             return
@@ -64,17 +75,13 @@ def main(page: ft.Page) -> None:
         if not txt:
             return
 
-        procesando["valor"] = True
         field.value = ""
-        field.disabled = True
-        send_btn.bgcolor = "#CCCCCC"
-        field.update()
-        send_btn.update()
+        _set_procesando(True)
 
         chat.controls.append(user_bubble(txt))
         typing = typing_indicator()
         chat.controls.append(typing)
-        chat.update()
+        page.update()
 
         def fetch() -> None:
             try:
@@ -82,21 +89,20 @@ def main(page: ft.Page) -> None:
             except Exception as e:
                 import traceback
                 traceback.print_exc()
-                respuesta = f"Error inesperado: {type(e).__name__}"
+                respuesta = f"Error: {type(e).__name__} — {e}"
                 guardado  = False
             finally:
-                procesando["valor"] = False
-                field.disabled = False
-                send_btn.bgcolor = USER_BUBBLE
-                field.update()
-                send_btn.update()
+                _set_procesando(False)
 
-            chat.controls.remove(typing)
+            if typing in chat.controls:
+                chat.controls.remove(typing)
+
             if guardado:
                 chat.controls.append(success_bubble(respuesta))
             else:
                 chat.controls.append(bot_bubble(respuesta))
-            chat.update()
+
+            page.update()
 
         threading.Thread(target=fetch, daemon=True).start()
 
@@ -112,12 +118,9 @@ def main(page: ft.Page) -> None:
 
 
 # ── Punto de entrada ──────────────────────────────────────────
-# En local corre como escritorio.
-# En Render (variable PORT presente) corre como web.
 PORT = os.environ.get("PORT")
 
 if PORT:
-    # Modo web — Render
     ft.app(
         target=main,
         view=ft.AppView.WEB_BROWSER,
@@ -125,5 +128,4 @@ if PORT:
         host="0.0.0.0",
     )
 else:
-    # Modo escritorio — desarrollo local
     ft.app(target=main)
