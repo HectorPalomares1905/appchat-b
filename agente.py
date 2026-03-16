@@ -12,11 +12,12 @@ _CONFIRMAR = {"si", "sí", "yes", "correcto", "confirmo", "ok", "adelante", "gua
 
 _EXTRACTOR_PROMPT = (
     "Eres un extractor de datos JSON. Lee la conversacion y devuelve "
-    "UNICAMENTE esta linea JSON con los valores encontrados (null si no se menciono):\n"
+    "UNICAMENTE este objeto JSON con los valores encontrados (null si no se menciono):\n"
     '{"productor":null,"producto":null,"variedad":null,"peso_neto":null,"total_cajas":null}\n\n'
     "Reglas absolutas:\n"
-    "- Responde SOLO con el JSON en una linea. Cero texto extra.\n"
-    "- Sin markdown, sin explicaciones, sin saltos de linea dentro del JSON.\n"
+    "- Responde SOLO con el objeto JSON. NUNCA un numero suelto, NUNCA texto, NUNCA otra cosa.\n"
+    "- Sin markdown, sin explicaciones.\n"
+    "- La respuesta SIEMPRE debe empezar con { y terminar con }.\n"
     "- Ejemplos: 'Luis Pacheco'->productor, 'Tomate'->producto, "
     "'Saladette'->variedad, '131 kg'->peso_neto:'131', '80 cajas'->total_cajas:'80'"
 )
@@ -36,11 +37,20 @@ def _extraer_datos(historial: list[dict]) -> dict:
     texto = texto.replace("```json", "").replace("```", "").strip()
     texto = texto.splitlines()[0].strip()
     print(f"[extractor] {texto}")
+
     try:
         raw = json.loads(texto)
     except json.JSONDecodeError:
         print(f"[extractor] JSON invalido: {texto}")
         return {}
+
+    # ── FIX: verificar que sea dict antes de llamar .items() ──
+    # json.loads("100") devuelve int 100, no un dict.
+    # Eso causaba: AttributeError — 'int' object has no attribute 'items'
+    if not isinstance(raw, dict):
+        print(f"[extractor] No es dict, ignorando: {raw}")
+        return {}
+
     return {
         k: str(v).strip()
         for k, v in raw.items()
@@ -69,7 +79,6 @@ class AgenteRecepcion:
         if self.esperando_confirmacion:
             if any(p in msg.lower() for p in _CONFIRMAR):
                 self.esperando_confirmacion = False
-
                 datos_json = json.dumps(
                     {k: self.datos.get(k) for k in CAMPOS},
                     ensure_ascii=False, indent=2
